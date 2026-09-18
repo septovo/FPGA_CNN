@@ -29,3 +29,11 @@
 __pycache__/
 *.pyc
 
+
+# Local HDL simulator output
+/tests/hdl/xsim.dir/
+/tests/hdl/.Xil/
+/tests/hdl/*.log
+/tests/hdl/*.jou
+/tests/hdl/*.pb
+/tests/hdl/*.wdb
