@@ -1,0 +1,6 @@
+the_ROM_image:
+{
+  [bootloader] artifacts/stage3/fsbl.elf
+  artifacts/stage3/system_wrapper.bit
+  artifacts/stage4/dual_ov5640_lcd.elf
+}

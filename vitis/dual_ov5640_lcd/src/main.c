@@ -38,6 +38,7 @@
 #include "xgpio.h"
 #include "xaxivdma.h"
 #include "xuartps_hw.h"
+#include "xtime_l.h"
 
 #include "display_ctrl/display_ctrl.h"
 #include "vdma_api/vdma_api.h"
@@ -45,6 +46,7 @@
 #include "emio_sccb_cfg/emio_sccb_cfg.h"
 #include "ov5640/ov5640_init.h"
 #include "frame_pipeline.h"
+#include "digit_preprocess.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -59,7 +61,8 @@
 #define AXI_GPIO_0_ID      XPAR_AXI_GPIO_0_DEVICE_ID
 #define AXI_GPIO_0_CHANEL  1
 #define GRAY_GPIO_CHANNEL  2
-#define GRAY_MEAN_ENABLE   1U
+#define GRAY_MEAN_ENABLE   0U
+#define PREPROCESS_EVERY_N_FRAMES 5U
 
 #define BYTES_PIXEL        3U
 #define VDMA_FRAME_STORES  3U
@@ -106,12 +109,27 @@
 static XAxiVdma    cam0_vdma;
 static XAxiVdma    disp_vdma;
 static FramePipeline gray_pipeline;
+static DigitPreprocessWorkspace digit_workspace;
+static DigitPreprocessResult digit_result;
 static u8 gray_roi[FRAME_PIPELINE_ROI_SIDE * FRAME_PIPELINE_ROI_SIDE]
     __attribute__((aligned(32)));
 static DisplayCtrl dispCtrl;
 static XGpio       axi_gpio_inst;
 static VideoMode   vd_mode;
 static unsigned int lcd_id;
+
+static uint64_t preprocess_clock(void *unused)
+{
+    XTime ticks;
+    (void)unused;
+    XTime_GetTime(&ticks);
+    return (uint64_t)ticks;
+}
+
+static u32 ticks_to_us(uint64_t ticks)
+{
+    return (u32)((ticks * 1000000U) / COUNTS_PER_SECOND);
+}
 
 
 /* ------------------------------------------------------------------------- */
@@ -229,6 +247,9 @@ int main(void)
     u32 last_reported_copies = 0U;
     u32 mean_enabled = GRAY_MEAN_ENABLE;
     FrameRoiInfo roi_info;
+    DigitPreprocessStatus digit_status = DIGIT_NONE;
+    u32 preprocess_count = 0U;
+    u32 digit_count = 0U;
 
     /*
      * 1. Read LCD ID.
@@ -475,16 +496,28 @@ int main(void)
                                     mean_enabled);
                 xil_printf("Gray mean filter=%u (effective next VSYNC)\r\n",
                            mean_enabled);
+            } else if (key == (u32)'p') {
+                u32 i;
+                if (digit_status != DIGIT_FOUND) {
+                    xil_printf("No digit tensor available\r\n");
+                } else {
+                    xil_printf("tensor28=");
+                    for (i = 0; i < DIGIT_MODEL_BYTES; ++i)
+                        xil_printf("%02x", digit_result.tensor[i]);
+                    xil_printf("\r\n");
+                }
             } else if (key == (u32)'s') {
                 xil_printf("VDMA1 irq=%u copied=%u dropped=%u "
-                           "triplet=%u slots=0x%x errors=%u recoveries=%u\r\n",
+                           "triplet=%u slots=0x%x errors=%u recoveries=%u "
+                           "preprocessed=%u digits=%u\r\n",
                            gray_pipeline.irq_frames,
                            gray_pipeline.copied_frames,
                            gray_pipeline.dropped_frames,
                            gray_pipeline.gray_triplet_errors,
                            gray_pipeline.observed_slots,
                            gray_pipeline.irq_errors,
-                           gray_pipeline.recoveries);
+                           gray_pipeline.recoveries,
+                           preprocess_count, digit_count);
             }
         }
         if (gray_pipeline.irq_errors != seen_gray_errors) {
@@ -504,6 +537,28 @@ int main(void)
             u32 sum = 0U;
             u32 i;
             quiet_loops = 0U;
+            if ((gray_pipeline.copied_frames % PREPROCESS_EVERY_N_FRAMES) == 0U) {
+                digit_status = digit_preprocess(
+                    gray_roi, roi_info.width, roi_info.height,
+                    roi_info.width, roi_info.x, roi_info.y,
+                    &digit_workspace, &digit_result,
+                    preprocess_clock, NULL);
+                ++preprocess_count;
+                if (digit_status == DIGIT_FOUND) ++digit_count;
+                if (preprocess_count <= 3U || preprocess_count % 60U == 0U) {
+                    xil_printf("Preprocess status=%d box=(%u,%u %ux%u) "
+                               "area=%u otsu=%u count=%u times_us=%u/%u/%u/%u\r\n",
+                               digit_status, digit_result.x, digit_result.y,
+                               digit_result.width, digit_result.height,
+                               digit_result.foreground_pixels,
+                               digit_result.otsu_threshold,
+                               digit_result.components,
+                               ticks_to_us(digit_result.threshold_ticks),
+                               ticks_to_us(digit_result.morphology_ticks),
+                               ticks_to_us(digit_result.component_ticks),
+                               ticks_to_us(digit_result.resize_ticks));
+                }
+            }
             if (gray_pipeline.copied_frames <= 6U ||
                 gray_pipeline.copied_frames - last_reported_copies >= 120U) {
                 for (i = 0; i < (u32)roi_info.width * roi_info.height; ++i)
