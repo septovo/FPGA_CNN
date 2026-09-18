@@ -1,5 +1,5 @@
 /*
- * Single OV5640 Direct Display V1
+ * CAM0 direct display plus independent grayscale capture
  * Zynq-7020 / Vitis 2020.2
  *
  * Purpose:
@@ -15,8 +15,8 @@
  * Result:
  *   - No image fusion.
  *   - No double-image/ghosting caused by two-camera blending.
- *   - No ARM-side per-frame image processing or memcpy.
- *   - Lower latency and much lower CPU load.
+ *   - Copy only a stable grayscale ROI in the ARM main loop.
+ *   - Preserve the RGB display path while preparing PS digit input.
  *
  * IMPORTANT:
  *   1. This version uses the physical CAM0 connector / CAM0_CH0.
@@ -37,12 +37,14 @@
 #include "xparameters.h"
 #include "xgpio.h"
 #include "xaxivdma.h"
+#include "xuartps_hw.h"
 
 #include "display_ctrl/display_ctrl.h"
 #include "vdma_api/vdma_api.h"
 #include "clk_wiz/clk_wiz.h"
 #include "emio_sccb_cfg/emio_sccb_cfg.h"
 #include "ov5640/ov5640_init.h"
+#include "frame_pipeline.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -50,10 +52,14 @@
 /* ------------------------------------------------------------------------- */
 #define CAM0_VDMA_ID       XPAR_AXIVDMA_0_DEVICE_ID
 #define DISP_VDMA_ID       XPAR_AXIVDMA_2_DEVICE_ID
+#define GRAY_VDMA_ID       XPAR_AXIVDMA_1_DEVICE_ID
+#define GRAY_VDMA_IRQ_ID   XPAR_FABRIC_AXI_VDMA_1_S2MM_INTROUT_INTR
 #define DISP_VTC_ID        XPAR_VTC_0_DEVICE_ID
 #define CLK_WIZ_ID         XPAR_CLK_WIZ_0_DEVICE_ID
 #define AXI_GPIO_0_ID      XPAR_AXI_GPIO_0_DEVICE_ID
 #define AXI_GPIO_0_CHANEL  1
+#define GRAY_GPIO_CHANNEL  2
+#define GRAY_MEAN_ENABLE   1U
 
 #define BYTES_PIXEL        3U
 #define VDMA_FRAME_STORES  3U
@@ -73,6 +79,8 @@
  */
 #define CAM0_FRAME_BUFFER_ADDR \
     ((u32)(XPAR_PS7_DDR_0_S_AXI_BASEADDR + 0x01000000U))
+#define GRAY_FRAME_BUFFER_ADDR \
+    ((u32)(XPAR_PS7_DDR_0_S_AXI_BASEADDR + 0x02000000U))
 
 
 /* ------------------------------------------------------------------------- */
@@ -97,6 +105,9 @@
 /* ------------------------------------------------------------------------- */
 static XAxiVdma    cam0_vdma;
 static XAxiVdma    disp_vdma;
+static FramePipeline gray_pipeline;
+static u8 gray_roi[FRAME_PIPELINE_ROI_SIDE * FRAME_PIPELINE_ROI_SIDE]
+    __attribute__((aligned(32)));
 static DisplayCtrl dispCtrl;
 static XGpio       axi_gpio_inst;
 static VideoMode   vd_mode;
@@ -212,6 +223,12 @@ int main(void)
 
     u32 frame_bytes;
     u32 all_buffers_bytes;
+    u32 last_gray_sequence = 0U;
+    u32 seen_gray_errors = 0U;
+    u32 quiet_loops = 0U;
+    u32 last_reported_copies = 0U;
+    u32 mean_enabled = GRAY_MEAN_ENABLE;
+    FrameRoiInfo roi_info;
 
     /*
      * 1. Read LCD ID.
@@ -227,6 +244,9 @@ int main(void)
                            AXI_GPIO_0_CHANEL,
                            0x07);
 
+    XGpio_SetDataDirection(&axi_gpio_inst, GRAY_GPIO_CHANNEL, 0x00U);
+    XGpio_DiscreteWrite(&axi_gpio_inst, GRAY_GPIO_CHANNEL, GRAY_MEAN_ENABLE);
+
     lcd_id = lcd_id_read(&axi_gpio_inst,
                          AXI_GPIO_0_CHANEL);
 
@@ -236,7 +256,7 @@ int main(void)
 
     xil_printf("\r\n");
     xil_printf("========================================\r\n");
-    xil_printf(" Single OV5640 Direct Display V1\r\n");
+    xil_printf(" CAM0 RGB display + grayscale capture\r\n");
     xil_printf(" CAM0 only - NO image fusion\r\n");
     xil_printf("========================================\r\n");
     xil_printf("LCD ID: 0x%x\r\n", lcd_id);
@@ -355,9 +375,24 @@ int main(void)
         return -1;
     }
 
-    /*
-     * Allow the camera to produce several complete frames.
-     */
+    /* Independent grayscale ring at +0x02000000, driven by CAM0 pixels. */
+    if (GRAY_FRAME_BUFFER_ADDR < CAM0_FRAME_BUFFER_ADDR + all_buffers_bytes ||
+        GRAY_FRAME_BUFFER_ADDR > XPAR_PS7_DDR_0_S_AXI_HIGHADDR -
+                                 all_buffers_bytes + 1U) {
+        xil_printf("ERROR: grayscale DDR ring overlaps or exceeds DDR\r\n");
+        return -1;
+    }
+    if (frame_pipeline_start(&gray_pipeline, sensor_w, sensor_h,
+                             GRAY_FRAME_BUFFER_ADDR, GRAY_VDMA_ID,
+                             GRAY_VDMA_IRQ_ID) != XST_SUCCESS) {
+        xil_printf("Grayscale VDMA1/GIC start failed\r\n");
+        return -1;
+    }
+    xil_printf("Grayscale triple buffer: 0x%08x - 0x%08x\r\n",
+               GRAY_FRAME_BUFFER_ADDR,
+               GRAY_FRAME_BUFFER_ADDR + all_buffers_bytes - 1U);
+
+    /* Allow the camera to produce several complete frames. */
     usleep(200000);
 
 
@@ -411,7 +446,8 @@ int main(void)
     xil_printf("Affine warp: disabled\r\n");
     xil_printf("Alpha blend: disabled\r\n");
     xil_printf("Dynamic seam: disabled\r\n");
-    xil_printf("CPU per-frame processing: none\r\n");
+    xil_printf("Gray mean filter: %u, VDMA1 IRQ: %u\r\n",
+               GRAY_MEAN_ENABLE, GRAY_VDMA_IRQ_ID);
     xil_printf("SENSOR_H_MIRROR = %d\r\n",
                SENSOR_H_MIRROR);
     xil_printf("\r\n");
@@ -427,10 +463,70 @@ int main(void)
      *      -> Display VDMA MM2S (Genlock slave, FrameDelay=1)
      *      -> LCD
      *
-     * The ARM can remain idle.
+     * The ARM main loop copies a stable grayscale ROI for later CNN input.
      */
     while (1) {
-        usleep(1000000);
+        if (XUartPs_IsReceiveData(STDOUT_BASEADDRESS)) {
+            u32 key = XUartPs_ReadReg(STDOUT_BASEADDRESS,
+                                      XUARTPS_FIFO_OFFSET) & 0xFFU;
+            if (key == (u32)'0' || key == (u32)'1') {
+                mean_enabled = key - (u32)'0';
+                XGpio_DiscreteWrite(&axi_gpio_inst, GRAY_GPIO_CHANNEL,
+                                    mean_enabled);
+                xil_printf("Gray mean filter=%u (effective next VSYNC)\r\n",
+                           mean_enabled);
+            } else if (key == (u32)'s') {
+                xil_printf("VDMA1 irq=%u copied=%u dropped=%u "
+                           "triplet=%u slots=0x%x errors=%u recoveries=%u\r\n",
+                           gray_pipeline.irq_frames,
+                           gray_pipeline.copied_frames,
+                           gray_pipeline.dropped_frames,
+                           gray_pipeline.gray_triplet_errors,
+                           gray_pipeline.observed_slots,
+                           gray_pipeline.irq_errors,
+                           gray_pipeline.recoveries);
+            }
+        }
+        if (gray_pipeline.irq_errors != seen_gray_errors) {
+            seen_gray_errors = gray_pipeline.irq_errors;
+            xil_printf("VDMA1 error=0x%08x; restarting write channel\r\n",
+                       gray_pipeline.last_error);
+            if (frame_pipeline_recover(&gray_pipeline) != XST_SUCCESS) {
+                xil_printf("VDMA1 recovery failed\r\n");
+                return -1;
+            }
+            last_gray_sequence = 0U;
+        }
+
+        if (frame_pipeline_copy_center_roi(&gray_pipeline, gray_roi,
+                sizeof(gray_roi), &last_gray_sequence,
+                &roi_info) == XST_SUCCESS) {
+            u32 sum = 0U;
+            u32 i;
+            quiet_loops = 0U;
+            if (gray_pipeline.copied_frames <= 6U ||
+                gray_pipeline.copied_frames - last_reported_copies >= 120U) {
+                for (i = 0; i < (u32)roi_info.width * roi_info.height; ++i)
+                    sum += gray_roi[i];
+                xil_printf("Gray seq=%u slot=%u ROI=(%u,%u %ux%u) sum=%u "
+                           "copied=%u dropped=%u triplet=%u errors=%u\r\n",
+                           roi_info.sequence, roi_info.frame_index,
+                           roi_info.x, roi_info.y, roi_info.width,
+                           roi_info.height, sum,
+                           gray_pipeline.copied_frames,
+                           gray_pipeline.dropped_frames,
+                           gray_pipeline.gray_triplet_errors,
+                           gray_pipeline.irq_errors);
+                last_reported_copies = gray_pipeline.copied_frames;
+            }
+        } else if (++quiet_loops >= 5000U) {
+            xil_printf("VDMA1 frame timeout; restarting write channel\r\n");
+            if (frame_pipeline_recover(&gray_pipeline) != XST_SUCCESS)
+                return -1;
+            last_gray_sequence = 0U;
+            quiet_loops = 0U;
+        }
+        usleep(1000);
     }
 
     return 0;

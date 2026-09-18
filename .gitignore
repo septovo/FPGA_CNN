@@ -37,3 +37,4 @@ __pycache__/
 /tests/hdl/*.jou
 /tests/hdl/*.pb
 /tests/hdl/*.wdb
+/tests/build_stage3/

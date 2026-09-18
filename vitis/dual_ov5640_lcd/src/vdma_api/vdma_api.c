@@ -134,7 +134,8 @@ int run_vdma_frame_buffer_stride(XAxiVdma* InstancePtr, int DeviceId, int hsize,
 		int vsize, int stride, int buf_base_addr, int number_frame_count,
 		int enable_frm_cnt_intr,vdma_run_mode mode)
 {
-	int Status,i;
+	int Status;
+	unsigned int i;
 	XAxiVdma_Config *Config;
 	XAxiVdma_FrameCounter FrameCfgPtr;
 
