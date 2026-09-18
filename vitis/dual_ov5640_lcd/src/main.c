@@ -47,6 +47,7 @@
 #include "ov5640/ov5640_init.h"
 #include "frame_pipeline.h"
 #include "digit_preprocess.h"
+#include "digit_model.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -250,6 +251,13 @@ int main(void)
     DigitPreprocessStatus digit_status = DIGIT_NONE;
     u32 preprocess_count = 0U;
     u32 digit_count = 0U;
+    u32 inference_count = 0U;
+    u32 inference_errors = 0U;
+    u32 last_inference_us = 0U;
+    u32 max_inference_us = 0U;
+    u32 last_digit = 0U;
+    u32 last_confidence_permille = 0U;
+    float digit_scores[DIGIT_MODEL_CLASSES];
 
     /*
      * 1. Read LCD ID.
@@ -469,6 +477,9 @@ int main(void)
     xil_printf("Dynamic seam: disabled\r\n");
     xil_printf("Gray mean filter: %u, VDMA1 IRQ: %u\r\n",
                GRAY_MEAN_ENABLE, GRAY_VDMA_IRQ_ID);
+    xil_printf("CNN model SHA256: %s\r\n", digit_model_sha256());
+    xil_printf("CNN ops: CAST/CONV2D x2/MAXPOOL/FC/SOFTMAX; workspace=%u bytes\r\n",
+               DIGIT_MODEL_WORKSPACE_BYTES);
     xil_printf("SENSOR_H_MIRROR = %d\r\n",
                SENSOR_H_MIRROR);
     xil_printf("\r\n");
@@ -496,7 +507,7 @@ int main(void)
                                     mean_enabled);
                 xil_printf("Gray mean filter=%u (effective next VSYNC)\r\n",
                            mean_enabled);
-            } else if (key == (u32)'p') {
+            } else if (key == (u32)'p' || key == (u32)'g') {
                 u32 i;
                 if (digit_status != DIGIT_FOUND) {
                     xil_printf("No digit tensor available\r\n");
@@ -505,11 +516,33 @@ int main(void)
                     for (i = 0; i < DIGIT_MODEL_BYTES; ++i)
                         xil_printf("%02x", digit_result.tensor[i]);
                     xil_printf("\r\n");
+                    if (key == (u32)'g' && inference_count != 0U) {
+                        xil_printf("scores_ppm=");
+                        for (i = 0U; i < DIGIT_MODEL_CLASSES; ++i)
+                            xil_printf("%u%s",
+                                       (u32)(digit_scores[i] * 1000000.0f + 0.5f),
+                                       i == DIGIT_MODEL_CLASSES - 1U ? "" : ",");
+                        xil_printf("\r\n");
+                    }
+                }
+            } else if (key == (u32)'v') {
+                u32 cls;
+                if (inference_count == 0U) {
+                    xil_printf("No CNN scores available\r\n");
+                } else {
+                    xil_printf("scores_ppm=");
+                    for (cls = 0U; cls < DIGIT_MODEL_CLASSES; ++cls)
+                        xil_printf("%u%s",
+                                   (u32)(digit_scores[cls] * 1000000.0f + 0.5f),
+                                   cls == DIGIT_MODEL_CLASSES - 1U ? "" : ",");
+                    xil_printf("\r\n");
                 }
             } else if (key == (u32)'s') {
                 xil_printf("VDMA1 irq=%u copied=%u dropped=%u "
                            "triplet=%u slots=0x%x errors=%u recoveries=%u "
-                           "preprocessed=%u digits=%u\r\n",
+                           "preprocessed=%u digits=%u infer=%u infer_errors=%u "
+                           "last_digit=%u confidence_per_mille=%u "
+                           "last_infer_us=%u max_infer_us=%u\r\n",
                            gray_pipeline.irq_frames,
                            gray_pipeline.copied_frames,
                            gray_pipeline.dropped_frames,
@@ -517,7 +550,10 @@ int main(void)
                            gray_pipeline.observed_slots,
                            gray_pipeline.irq_errors,
                            gray_pipeline.recoveries,
-                           preprocess_count, digit_count);
+                           preprocess_count, digit_count,
+                           inference_count, inference_errors, last_digit,
+                           last_confidence_permille, last_inference_us,
+                           max_inference_us);
             }
         }
         if (gray_pipeline.irq_errors != seen_gray_errors) {
@@ -544,7 +580,39 @@ int main(void)
                     &digit_workspace, &digit_result,
                     preprocess_clock, NULL);
                 ++preprocess_count;
-                if (digit_status == DIGIT_FOUND) ++digit_count;
+                if (digit_status == DIGIT_FOUND) {
+                    uint64_t infer_start, infer_end;
+                    unsigned int best = 0U;
+                    unsigned int cls;
+                    int inference_status;
+                    ++digit_count;
+                    infer_start = preprocess_clock(NULL);
+                    inference_status = digit_model_infer(digit_result.tensor,
+                                                         digit_scores);
+                    infer_end = preprocess_clock(NULL);
+                    last_inference_us = ticks_to_us(infer_end - infer_start);
+                    if (last_inference_us > max_inference_us)
+                        max_inference_us = last_inference_us;
+                    if (inference_status != 0) {
+                        ++inference_errors;
+                        xil_printf("CNN inference failed: %d\r\n",
+                                   inference_status);
+                    } else {
+                        for (cls = 1U; cls < DIGIT_MODEL_CLASSES; ++cls)
+                            if (digit_scores[cls] > digit_scores[best])
+                                best = cls;
+                        last_digit = best;
+                        last_confidence_permille =
+                            (u32)(digit_scores[best] * 1000.0f + 0.5f);
+                        ++inference_count;
+                        if (inference_count <= 3U ||
+                            inference_count % 12U == 0U)
+                            xil_printf("CNN digit=%u confidence=%u/1000 "
+                                       "infer_us=%u count=%u\r\n",
+                                       last_digit, last_confidence_permille,
+                                       last_inference_us, inference_count);
+                    }
+                }
                 if (preprocess_count <= 3U || preprocess_count % 60U == 0U) {
                     xil_printf("Preprocess status=%d box=(%u,%u %ux%u) "
                                "area=%u otsu=%u count=%u times_us=%u/%u/%u/%u\r\n",

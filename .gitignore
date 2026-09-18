@@ -39,3 +39,4 @@ __pycache__/
 /tests/hdl/*.wdb
 /tests/build_stage3/
 /tests/build_stage4/
+/tests/build_stage5/
