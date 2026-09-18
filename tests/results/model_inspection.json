@@ -1,0 +1,186 @@
+{
+  "model": "E:\\xuanxiu\\39_dual_ov5640_lcd\\tests\\upstream_mnist\\mnist.tflite",
+  "sha256": "b0ae6afa9e9bceed8ae3038c0a844634eddc24f30f262c5b7e5ae800db2db50d",
+  "bytes": 446972,
+  "runtime": "ai-edge-litert 2.2.0",
+  "schema_version": 3,
+  "inputs": [
+    {
+      "name": "input_1",
+      "index": 0,
+      "shape": [
+        1,
+        28,
+        28
+      ],
+      "shape_signature": [
+        -1,
+        28,
+        28
+      ],
+      "dtype": "uint8",
+      "quantization_scales": [],
+      "quantization_zero_points": []
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Identity",
+      "index": 16,
+      "shape": [
+        1,
+        10
+      ],
+      "shape_signature": [
+        -1,
+        10
+      ],
+      "dtype": "float32",
+      "quantization_scales": [],
+      "quantization_zero_points": []
+    }
+  ],
+  "tensor_count": 19,
+  "sum_current_tensor_shape_bytes": 1446692,
+  "operator_codes": [
+    {
+      "index": 0,
+      "name": "CAST",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 1,
+      "name": "EXPAND_DIMS",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 2,
+      "name": "CONV_2D",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 3,
+      "name": "MAX_POOL_2D",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 4,
+      "name": "RESHAPE",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 5,
+      "name": "FULLY_CONNECTED",
+      "version": 1,
+      "custom_code": null
+    },
+    {
+      "index": 6,
+      "name": "SOFTMAX",
+      "version": 1,
+      "custom_code": null
+    }
+  ],
+  "subgraphs": [
+    {
+      "index": 0,
+      "tensor_count": 17,
+      "operators": [
+        {
+          "index": 0,
+          "opcode": "CAST",
+          "inputs": [
+            0
+          ],
+          "outputs": [
+            9
+          ]
+        },
+        {
+          "index": 1,
+          "opcode": "EXPAND_DIMS",
+          "inputs": [
+            9,
+            6
+          ],
+          "outputs": [
+            10
+          ]
+        },
+        {
+          "index": 2,
+          "opcode": "CONV_2D",
+          "inputs": [
+            10,
+            2,
+            1
+          ],
+          "outputs": [
+            11
+          ]
+        },
+        {
+          "index": 3,
+          "opcode": "CONV_2D",
+          "inputs": [
+            11,
+            4,
+            3
+          ],
+          "outputs": [
+            12
+          ]
+        },
+        {
+          "index": 4,
+          "opcode": "MAX_POOL_2D",
+          "inputs": [
+            12
+          ],
+          "outputs": [
+            13
+          ]
+        },
+        {
+          "index": 5,
+          "opcode": "RESHAPE",
+          "inputs": [
+            13,
+            7
+          ],
+          "outputs": [
+            14
+          ]
+        },
+        {
+          "index": 6,
+          "opcode": "FULLY_CONNECTED",
+          "inputs": [
+            14,
+            8,
+            5
+          ],
+          "outputs": [
+            15
+          ]
+        },
+        {
+          "index": 7,
+          "opcode": "SOFTMAX",
+          "inputs": [
+            15
+          ],
+          "outputs": [
+            16
+          ]
+        }
+      ]
+    }
+  ],
+  "note": "Summed tensor shapes are not peak runtime arena memory; measure that on the target runtime."
+}

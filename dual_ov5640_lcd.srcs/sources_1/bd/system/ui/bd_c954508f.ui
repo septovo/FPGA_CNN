@@ -1,0 +1,104 @@
+{
+   "ActiveEmotionalView":"Default View",
+   "Default View_ScaleFactor":"0.354422",
+   "Default View_TopLeft":"-719,0",
+   "ExpandedHierarchyInLayout":"",
+   "guistr":"# # String gsaved with Nlview 7.0r6  2020-01-29 bk=1.5227 VDI=41 GEI=36 GUI=JA:10.0 non-TLS
+#  -string -flagsOSRD
+preplace port DDR -pg 1 -lvl 6 -x 2130 -y 510 -defaultsOSRD
+preplace port FIXED_IO -pg 1 -lvl 6 -x 2130 -y 530 -defaultsOSRD
+preplace port emio_sccb -pg 1 -lvl 6 -x 2130 -y 490 -defaultsOSRD
+preplace port lcd -pg 1 -lvl 6 -x 2130 -y 740 -defaultsOSRD
+preplace port lcd_rgb -pg 1 -lvl 6 -x 2130 -y 760 -defaultsOSRD
+preplace port lcd_rst -pg 1 -lvl 6 -x 2130 -y 780 -defaultsOSRD
+preplace port lcd_bl -pg 1 -lvl 6 -x 2130 -y 800 -defaultsOSRD
+preplace port cam_rst_n_0 -pg 1 -lvl 6 -x 2130 -y 860 -defaultsOSRD
+preplace port cam_pclk_0 -pg 1 -lvl 0 -x 0 -y 990 -defaultsOSRD
+preplace port cam_href_0 -pg 1 -lvl 0 -x 0 -y 1030 -defaultsOSRD
+preplace port cam_vsync_0 -pg 1 -lvl 0 -x 0 -y 1010 -defaultsOSRD
+preplace port cam_pwdn_0 -pg 1 -lvl 6 -x 2130 -y 1230 -defaultsOSRD
+preplace port cam_rst_n_1 -pg 1 -lvl 6 -x 2130 -y 1430 -defaultsOSRD
+preplace port cam_pwdn_1 -pg 1 -lvl 6 -x 2130 -y 1450 -defaultsOSRD
+preplace port cam_pclk_1 -pg 1 -lvl 0 -x 0 -y 1260 -defaultsOSRD
+preplace port cam_href_1 -pg 1 -lvl 0 -x 0 -y 1300 -defaultsOSRD
+preplace port cam_vsync_1 -pg 1 -lvl 0 -x 0 -y 1280 -defaultsOSRD
+preplace portBus cam_data_0 -pg 1 -lvl 0 -x 0 -y 1050 -defaultsOSRD
+preplace portBus cam_data_1 -pg 1 -lvl 0 -x 0 -y 1320 -defaultsOSRD
+preplace inst axi_vdma_0 -pg 1 -lvl 3 -x 1000 -y 290 -defaultsOSRD
+preplace inst clk_wiz_0 -pg 1 -lvl 3 -x 1000 -y 1320 -defaultsOSRD
+preplace inst processing_system7_0 -pg 1 -lvl 5 -x 1850 -y 550 -defaultsOSRD
+preplace inst rst_ps7_0_100M -pg 1 -lvl 1 -x 200 -y 560 -defaultsOSRD
+preplace inst v_axi4s_vid_out_0 -pg 1 -lvl 4 -x 1440 -y 940 -defaultsOSRD
+preplace inst v_tc_0 -pg 1 -lvl 3 -x 1000 -y 1070 -defaultsOSRD
+preplace inst v_vid_in_axi4s_0 -pg 1 -lvl 2 -x 570 -y 1040 -defaultsOSRD
+preplace inst rst_ps7_0_150M -pg 1 -lvl 3 -x 1000 -y 100 -defaultsOSRD
+preplace inst v_vid_in_axi4s_1 -pg 1 -lvl 2 -x 570 -y 1310 -defaultsOSRD
+preplace inst axi_vdma_1 -pg 1 -lvl 3 -x 1000 -y 550 -defaultsOSRD
+preplace inst axi_vdma_2 -pg 1 -lvl 3 -x 1000 -y 790 -defaultsOSRD
+preplace inst ps7_0_axi_periph -pg 1 -lvl 2 -x 570 -y 680 -defaultsOSRD
+preplace inst axi_mem_intercon -pg 1 -lvl 4 -x 1440 -y 240 -defaultsOSRD
+preplace inst axi_gpio_0 -pg 1 -lvl 4 -x 1440 -y 700 -defaultsOSRD
+preplace inst rgb2lcd_0 -pg 1 -lvl 5 -x 1850 -y 770 -defaultsOSRD
+preplace inst ov5640_capture_data_0 -pg 1 -lvl 1 -x 200 -y 1010 -defaultsOSRD
+preplace inst ov5640_capture_data_1 -pg 1 -lvl 1 -x 200 -y 1280 -defaultsOSRD
+preplace netloc clk_wiz_0_clk_out1 1 2 3 820 920 1220 780 1610J
+preplace netloc processing_system7_0_FCLK_RESET0_N 1 0 6 20 410 NJ 410 750 410 1240J 420 1590J 400 2100
+preplace netloc rst_ps7_0_100M_peripheral_aresetn 1 1 3 420 900 730 670 1220J
+preplace netloc v_axi4s_vid_out_0_vtg_ce 1 2 3 810 910 1240J 800 1590
+preplace netloc processing_system7_0_FCLK_CLK1 1 1 5 420 910 740 900 1250 440 1620 410 2090
+preplace netloc processing_system7_0_FCLK_CLK0 1 0 6 30 460 410 460 790 420 1230 560 1600 680 2080
+preplace netloc rst_ps7_0_150M_peripheral_aresetn 1 3 1 1190 140n
+preplace netloc axi_vdma_0_s2mm_frame_ptr_out 1 2 2 810 400 1180
+preplace netloc rgb2lcd_0_lcd_rst 1 5 1 NJ 780
+preplace netloc rgb2lcd_0_lcd_bl 1 5 1 NJ 800
+preplace netloc ov5640_capture_data_0_vid_clk 1 1 1 400 990n
+preplace netloc ov5640_capture_data_0_vid_ce 1 1 1 410 1010n
+preplace netloc clk_wiz_0_locked 1 0 4 30 1170 NJ 1170 770J 1220 1180
+preplace netloc ov5640_capture_data_0_cam_rst_n 1 1 5 390J 1440 NJ 1440 1260J 790 1600J 860 NJ
+preplace netloc cam_pclk_0_1 1 0 1 NJ 990
+preplace netloc cam_data_0_1 1 0 1 NJ 1050
+preplace netloc cam_href_0_1 1 0 1 NJ 1030
+preplace netloc cam_vsync_0_1 1 0 1 NJ 1010
+preplace netloc ov5640_capture_data_0_cam_pwdn 1 1 5 380J 1180 720J 1230 NJ 1230 NJ 1230 NJ
+preplace netloc ov5640_capture_data_1_vid_clk 1 1 1 400 1260n
+preplace netloc ov5640_capture_data_1_vid_ce 1 1 1 410 1280n
+preplace netloc ov5640_capture_data_1_cam_rst_n 1 1 5 380J 1460 NJ 1460 NJ 1460 NJ 1460 2090J
+preplace netloc ov5640_capture_data_1_cam_pwdn 1 1 5 370J 1450 NJ 1450 NJ 1450 NJ 1450 NJ
+preplace netloc cam_pclk_1_1 1 0 1 NJ 1260
+preplace netloc cam_href_1_1 1 0 1 NJ 1300
+preplace netloc cam_vsync_1_1 1 0 1 NJ 1280
+preplace netloc cam_data_1_1 1 0 1 NJ 1320
+preplace netloc rgb2lcd_0_lcd 1 5 1 NJ 740
+preplace netloc processing_system7_0_DDR 1 5 1 2110J 500n
+preplace netloc axi_vdma_2_M_AXIS_MM2S 1 3 1 1200 780n
+preplace netloc ov5640_capture_data_1_vid_rgb 1 1 1 N 1240
+preplace netloc ps7_0_axi_periph_M03_AXI 1 2 1 770 690n
+preplace netloc axi_gpio_0_GPIO 1 4 1 1610 700n
+preplace netloc rgb2lcd_0_lcd_rgb 1 5 1 NJ 760
+preplace netloc ps7_0_axi_periph_M01_AXI 1 2 1 780 490n
+preplace netloc axi_vdma_0_M_AXI_S2MM 1 3 1 1180 120n
+preplace netloc v_axi4s_vid_out_0_vid_io_out 1 4 1 1620 770n
+preplace netloc axi_mem_intercon_M00_AXI 1 4 1 1610 240n
+preplace netloc ps7_0_axi_periph_M04_AXI 1 2 2 780 680 NJ
+preplace netloc axi_vdma_1_M_AXI_S2MM 1 3 1 1200 140n
+preplace netloc ps7_0_axi_periph_M00_AXI 1 2 1 720 240n
+preplace netloc ov5640_capture_data_0_vid_rgb 1 1 1 N 970
+preplace netloc v_vid_in_axi4s_0_video_out 1 2 1 760 260n
+preplace netloc processing_system7_0_FIXED_IO 1 5 1 2110J 520n
+preplace netloc axi_vdma_2_M_AXI_MM2S 1 3 1 1210 160n
+preplace netloc processing_system7_0_M_AXI_GP0 1 1 5 420 430 NJ 430 NJ 430 1600J 420 2080
+preplace netloc v_tc_0_vtiming_out 1 3 1 1270 880n
+preplace netloc v_vid_in_axi4s_1_video_out 1 2 1 800 510n
+preplace netloc ps7_0_axi_periph_M05_AXI 1 2 1 750 730n
+preplace netloc processing_system7_0_GPIO_0 1 5 1 2110J 480n
+preplace netloc ps7_0_axi_periph_M02_AXI 1 2 1 720 670n
+levelinfo -pg 1 0 200 570 1000 1440 1850 2130
+pagesize -pg 1 -db -bbox -sgen -160 0 2270 1470
+"
+}
+{
+   "da_axi4_cnt":"19",
+   "da_board_cnt":"1",
+   "da_clkrst_cnt":"2",
+   "da_ps7_cnt":"1"
+}

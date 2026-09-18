@@ -1,0 +1,31 @@
+# Vivado generated state and build outputs
+/.Xil/
+/dual_ov5640_lcd.cache/
+/dual_ov5640_lcd.gen/
+/dual_ov5640_lcd.hw/
+/dual_ov5640_lcd.ip_user_files/
+/dual_ov5640_lcd.runs/
+/dual_ov5640_lcd.sim/
+/vivado*.log
+/vivado*.jou
+/vivado*.str
+/hs_err_pid*
+
+# Vitis generated platform, binaries, IDE state
+/vitis/.metadata/
+/vitis/RemoteSystemsTempFiles/
+/vitis/IDE.log
+/vitis/.analytics
+/vitis/system_wrapper/
+/vitis/dual_ov5640_lcd_system/
+/vitis/dual_ov5640_lcd/_ide/
+/vitis/dual_ov5640_lcd/Debug/
+
+# PC test environment and upstream Git history
+/tests/.venv/
+/tests/mnist.npz
+/tests/upstream_mnist/.git/
+/tests/upstream_mnist/live-demo.mp4
+__pycache__/
+*.pyc
+

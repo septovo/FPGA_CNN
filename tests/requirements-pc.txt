@@ -1,0 +1,4 @@
+# Python 3.12 on Windows; no TensorFlow package is required for these scripts.
+ai-edge-litert==2.2.0
+numpy==2.1.3
+opencv-python-headless==4.11.0.86
