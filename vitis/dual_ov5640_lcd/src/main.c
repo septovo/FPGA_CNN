@@ -49,6 +49,7 @@
 #include "digit_preprocess.h"
 #include "digit_model.h"
 #include "digit_osd.h"
+#include "runtime_stats.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -65,6 +66,10 @@
 #define GRAY_GPIO_CHANNEL  2
 #define GRAY_MEAN_ENABLE   0U
 #define PREPROCESS_EVERY_N_FRAMES 5U
+#define RUN_MODE_PASSTHROUGH 0U
+#define RUN_MODE_RECOGNITION 1U
+#define RUN_MODE_OSD_DIAGNOSTIC 2U
+#define APP_DDR_ORIGIN 0x00100000U
 
 #define BYTES_PIXEL        3U
 #define VDMA_FRAME_STORES  3U
@@ -113,6 +118,8 @@ static XAxiVdma    disp_vdma;
 static FramePipeline gray_pipeline;
 static DigitPreprocessWorkspace digit_workspace;
 static DigitPreprocessResult digit_result;
+static RuntimeStats runtime_stats;
+static RuntimeStatsSnapshot stats_snapshot;
 static u8 gray_roi[FRAME_PIPELINE_ROI_SIDE * FRAME_PIPELINE_ROI_SIDE]
     __attribute__((aligned(32)));
 static DisplayCtrl dispCtrl;
@@ -131,6 +138,18 @@ static uint64_t preprocess_clock(void *unused)
 static u32 ticks_to_us(uint64_t ticks)
 {
     return (u32)((ticks * 1000000U) / COUNTS_PER_SECOND);
+}
+
+static u32 ticks_to_ms(uint64_t ticks)
+{
+    return (u32)((ticks * 1000U) / COUNTS_PER_SECOND);
+}
+
+static void print_uart_help(void)
+{
+    xil_printf("Commands: a=passthrough c=recognition d=OSD diagnostic ");
+    xil_printf("0/1=mean off/on o=toggle OSD p=tensor g=tensor+scores ");
+    xil_printf("v=scores s=status r=reset statistics h=help\r\n");
 }
 
 
@@ -249,6 +268,12 @@ int main(void)
     u32 last_reported_copies = 0U;
     u32 mean_enabled = GRAY_MEAN_ENABLE;
     u32 osd_enabled = 1U;
+    u32 run_mode = RUN_MODE_RECOGNITION;
+    uint64_t stats_start_ticks;
+    u32 stats_irq_base = 0U;
+    u32 stats_copy_base = 0U;
+    u32 stats_preprocess_base = 0U;
+    extern char _end;
     FrameRoiInfo roi_info;
     DigitPreprocessStatus digit_status = DIGIT_NONE;
     u32 preprocess_count = 0U;
@@ -261,13 +286,16 @@ int main(void)
     u32 last_confidence_permille = 0U;
     float digit_scores[DIGIT_MODEL_CLASSES];
 
+    runtime_stats_reset(&runtime_stats);
+    stats_start_ticks = preprocess_clock(NULL);
+
     /*
      * 1. Read LCD ID.
      */
     if (XGpio_Initialize(&axi_gpio_inst,
                          AXI_GPIO_0_ID) != XST_SUCCESS) {
 
-        xil_printf("GPIO initialize failed\r\n");
+        xil_printf("ERROR E01: GPIO initialize failed\r\n");
         return -1;
     }
 
@@ -291,9 +319,6 @@ int main(void)
     xil_printf(" CAM0 only - NO image fusion\r\n");
     xil_printf("========================================\r\n");
     xil_printf("LCD ID: 0x%x\r\n", lcd_id);
-    digit_osd_init();
-    xil_printf("OSD AXI-Lite base=0x%08x timeout=%u display frames\r\n",
-               DIGIT_OSD_BASE, DIGIT_OSD_TIMEOUT_FRAMES);
 
 
     /*
@@ -315,7 +340,7 @@ int main(void)
     if ((u32)sensor_w != (u32)vd_mode.width ||
         (u32)sensor_h != (u32)vd_mode.height) {
 
-        xil_printf("ERROR: camera/display dimensions do not match\r\n");
+        xil_printf("ERROR E02: camera/display dimensions do not match\r\n");
         return -1;
     }
 
@@ -334,7 +359,7 @@ int main(void)
                     total_v_pixel);
 
     if (cam_status != 0U) {
-        xil_printf("CAM0 OV5640 detect/init failed, status=%d\r\n",
+        xil_printf("ERROR E03: CAM0 OV5640 detect/init failed, status=%d\r\n",
                    cam_status);
         return -1;
     }
@@ -385,7 +410,7 @@ int main(void)
     if (DisplayInitialize(&dispCtrl,
                           DISP_VTC_ID) != XST_SUCCESS) {
 
-        xil_printf("DisplayInitialize failed\r\n");
+        xil_printf("ERROR E04: DisplayInitialize failed\r\n");
         return -1;
     }
 
@@ -405,7 +430,7 @@ int main(void)
                               0,
                               ONLY_WRITE) != XST_SUCCESS) {
 
-        xil_printf("CAM0 VDMA S2MM start failed\r\n");
+        xil_printf("ERROR E05: CAM0 VDMA S2MM start failed\r\n");
         return -1;
     }
 
@@ -413,13 +438,13 @@ int main(void)
     if (GRAY_FRAME_BUFFER_ADDR < CAM0_FRAME_BUFFER_ADDR + all_buffers_bytes ||
         GRAY_FRAME_BUFFER_ADDR > XPAR_PS7_DDR_0_S_AXI_HIGHADDR -
                                  all_buffers_bytes + 1U) {
-        xil_printf("ERROR: grayscale DDR ring overlaps or exceeds DDR\r\n");
+        xil_printf("ERROR E06: grayscale DDR ring overlaps or exceeds DDR\r\n");
         return -1;
     }
     if (frame_pipeline_start(&gray_pipeline, sensor_w, sensor_h,
                              GRAY_FRAME_BUFFER_ADDR, GRAY_VDMA_ID,
                              GRAY_VDMA_IRQ_ID) != XST_SUCCESS) {
-        xil_printf("Grayscale VDMA1/GIC start failed\r\n");
+        xil_printf("ERROR E07: Grayscale VDMA1/GIC start failed\r\n");
         return -1;
     }
     xil_printf("Grayscale triple buffer: 0x%08x - 0x%08x\r\n",
@@ -459,7 +484,7 @@ int main(void)
                               0,
                               ONLY_READ) != XST_SUCCESS) {
 
-        xil_printf("Display VDMA MM2S start failed\r\n");
+        xil_printf("ERROR E08: Display VDMA MM2S start failed\r\n");
         return -1;
     }
 
@@ -468,13 +493,17 @@ int main(void)
      * 8. Start LCD timing.
      */
     if (DisplayStart(&dispCtrl) != XST_SUCCESS) {
-        xil_printf("DisplayStart failed\r\n");
+        xil_printf("ERROR E09: DisplayStart failed\r\n");
         return -1;
     }
+    digit_osd_init();
+    xil_printf("OSD AXI-Lite base=0x%08x timeout=%u display frames\r\n",
+               DIGIT_OSD_BASE, DIGIT_OSD_TIMEOUT_FRAMES);
 
 
     xil_printf("\r\n");
     xil_printf("Single-camera zero-copy display is running.\r\n");
+    print_uart_help();
     xil_printf("CAM1: disabled in software\r\n");
     xil_printf("Fusion: disabled\r\n");
     xil_printf("Affine warp: disabled\r\n");
@@ -506,7 +535,34 @@ int main(void)
         if (XUartPs_IsReceiveData(STDOUT_BASEADDRESS)) {
             u32 key = XUartPs_ReadReg(STDOUT_BASEADDRESS,
                                       XUARTPS_FIFO_OFFSET) & 0xFFU;
-            if (key == (u32)'0' || key == (u32)'1') {
+            if (key == (u32)'a') {
+                run_mode = RUN_MODE_PASSTHROUGH;
+                osd_enabled = 0U;
+                digit_osd_set_enabled(0U);
+                xil_printf("Run mode=passthrough\r\n");
+            } else if (key == (u32)'c') {
+                run_mode = RUN_MODE_RECOGNITION;
+                osd_enabled = 1U;
+                digit_osd_set_enabled(1U);
+                xil_printf("Run mode=recognition\r\n");
+            } else if (key == (u32)'d') {
+                run_mode = RUN_MODE_OSD_DIAGNOSTIC;
+                osd_enabled = 1U;
+                digit_osd_set_enabled(1U);
+                digit_osd_show((u16)(sensor_w / 4U), (u16)(sensor_h / 4U),
+                               (u16)(sensor_w / 2U), (u16)(sensor_h / 2U),
+                               8U, 990U, gray_pipeline.irq_frames);
+                xil_printf("Run mode=OSD diagnostic\r\n");
+            } else if (key == (u32)'h') {
+                print_uart_help();
+            } else if (key == (u32)'r') {
+                runtime_stats_reset(&runtime_stats);
+                stats_start_ticks = preprocess_clock(NULL);
+                stats_irq_base = gray_pipeline.irq_frames;
+                stats_copy_base = gray_pipeline.copied_frames;
+                stats_preprocess_base = preprocess_count;
+                xil_printf("Runtime statistics reset\r\n");
+            } else if (key == (u32)'0' || key == (u32)'1') {
                 mean_enabled = key - (u32)'0';
                 XGpio_DiscreteWrite(&axi_gpio_inst, GRAY_GPIO_CHANNEL,
                                     mean_enabled);
@@ -547,23 +603,51 @@ int main(void)
                     xil_printf("\r\n");
                 }
             } else if (key == (u32)'s') {
-                xil_printf("VDMA1 irq=%u copied=%u dropped=%u "
-                           "triplet=%u slots=0x%x errors=%u recoveries=%u "
-                           "preprocessed=%u digits=%u infer=%u infer_errors=%u "
-                           "last_digit=%u confidence_per_mille=%u "
-                           "last_infer_us=%u max_infer_us=%u\r\n",
+                uint64_t now = preprocess_clock(NULL);
+                u32 elapsed_ms = ticks_to_ms(now - stats_start_ticks);
+                u32 capture_x100 = elapsed_ms == 0U ? 0U :
+                    (u32)(((uint64_t)(gray_pipeline.irq_frames - stats_irq_base) * 100000U) / elapsed_ms);
+                u32 copy_x100 = elapsed_ms == 0U ? 0U :
+                    (u32)(((uint64_t)(gray_pipeline.copied_frames - stats_copy_base) * 100000U) / elapsed_ms);
+                u32 process_x100 = elapsed_ms == 0U ? 0U :
+                    (u32)(((uint64_t)(preprocess_count - stats_preprocess_base) * 100000U) / elapsed_ms);
+                runtime_stats_snapshot(&runtime_stats, &stats_snapshot);
+                xil_printf("STATUS mode=%u elapsed_ms=%u capture_fps_x100=%u "
+                           "copy_fps_x100=%u process_fps_x100=%u\r\n",
+                           run_mode, elapsed_ms, capture_x100, copy_x100,
+                           process_x100);
+                xil_printf("VDMA1 irq=%u copied=%u dropped=%u triplet=%u "
+                           "slots=0x%x errors=%u recoveries=%u\r\n",
                            gray_pipeline.irq_frames,
                            gray_pipeline.copied_frames,
                            gray_pipeline.dropped_frames,
                            gray_pipeline.gray_triplet_errors,
                            gray_pipeline.observed_slots,
                            gray_pipeline.irq_errors,
-                           gray_pipeline.recoveries,
-                           preprocess_count, digit_count,
-                           inference_count, inference_errors, last_digit,
-                           last_confidence_permille, last_inference_us,
-                           max_inference_us);
-                xil_printf("OSD status=0x%08x\r\n", digit_osd_status());
+                           gray_pipeline.recoveries);
+                xil_printf("PERF preprocess_n=%u avg_us=%u inference_n=%u "
+                           "errors=%u avg_us=%u p95_us=%u min_us=%u max_us=%u "
+                           "window=%u\r\n",
+                           runtime_stats.preprocess_samples,
+                           stats_snapshot.preprocess_average_us,
+                           runtime_stats.inference_samples,
+                           runtime_stats.inference_errors,
+                           stats_snapshot.inference_average_us,
+                           stats_snapshot.inference_p95_us,
+                           stats_snapshot.inference_min_us,
+                           stats_snapshot.inference_max_us,
+                           stats_snapshot.window_samples);
+                xil_printf("RESULT digit=%u confidence_per_mille=%u "
+                           "last_infer_us=%u osd=0x%08x\r\n",
+                           last_digit, last_confidence_permille,
+                           last_inference_us, digit_osd_status());
+                xil_printf("MEM app_static_bytes=%u cnn_workspace_bytes=%u "
+                           "rgb_ring_bytes=%u gray_ring_bytes=%u\r\n",
+                           (u32)((uintptr_t)&_end - APP_DDR_ORIGIN),
+                           DIGIT_MODEL_WORKSPACE_BYTES,
+                           all_buffers_bytes, all_buffers_bytes);
+                xil_printf("NOTE compute_us excludes camera/display latency; "
+                           "measure end-to-end latency externally\r\n");
             }
         }
         if (gray_pipeline.irq_errors != seen_gray_errors) {
@@ -571,7 +655,7 @@ int main(void)
             xil_printf("VDMA1 error=0x%08x; restarting write channel\r\n",
                        gray_pipeline.last_error);
             if (frame_pipeline_recover(&gray_pipeline) != XST_SUCCESS) {
-                xil_printf("VDMA1 recovery failed\r\n");
+                xil_printf("ERROR E10: VDMA1 recovery failed\r\n");
                 return -1;
             }
             last_gray_sequence = 0U;
@@ -583,13 +667,25 @@ int main(void)
             u32 sum = 0U;
             u32 i;
             quiet_loops = 0U;
-            if ((gray_pipeline.copied_frames % PREPROCESS_EVERY_N_FRAMES) == 0U) {
+            if (run_mode == RUN_MODE_OSD_DIAGNOSTIC &&
+                (gray_pipeline.copied_frames % 10U) == 0U)
+                digit_osd_show((u16)(sensor_w / 4U), (u16)(sensor_h / 4U),
+                               (u16)(sensor_w / 2U), (u16)(sensor_h / 2U),
+                               8U, 990U, roi_info.sequence);
+            if (run_mode == RUN_MODE_RECOGNITION &&
+                (gray_pipeline.copied_frames % PREPROCESS_EVERY_N_FRAMES) == 0U) {
                 digit_status = digit_preprocess(
                     gray_roi, roi_info.width, roi_info.height,
                     roi_info.width, roi_info.x, roi_info.y,
                     &digit_workspace, &digit_result,
                     preprocess_clock, NULL);
                 ++preprocess_count;
+                runtime_stats_record_preprocess(
+                    &runtime_stats,
+                    ticks_to_us(digit_result.threshold_ticks +
+                                digit_result.morphology_ticks +
+                                digit_result.component_ticks +
+                                digit_result.resize_ticks));
                 if (digit_status == DIGIT_FOUND) {
                     uint64_t infer_start, infer_end;
                     unsigned int best = 0U;
@@ -603,6 +699,9 @@ int main(void)
                     last_inference_us = ticks_to_us(infer_end - infer_start);
                     if (last_inference_us > max_inference_us)
                         max_inference_us = last_inference_us;
+                    runtime_stats_record_inference(&runtime_stats,
+                                                   last_inference_us,
+                                                   inference_status == 0);
                     if (inference_status != 0) {
                         ++inference_errors;
                         digit_osd_no_digit(roi_info.sequence);

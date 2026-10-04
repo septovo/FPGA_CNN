@@ -1,0 +1,1 @@
+sample_id,run_id,timestamp,truth,prediction,confidence,localization_status,lighting,stroke_width,angle_deg,distance_cm,background,end_to_end_ms,notes

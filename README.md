@@ -1,6 +1,6 @@
 # FPGA_CNN
 
-Zynq-7020 双 OV5640 硬件工程的手写数字识别改造项目。目前保留 **CAM0 → VDMA → RGB LCD** 的单摄像头直通基线；已完成 PL 灰度采集与均值滤波、PS 图像预处理与裸机 CNN 推理，以及 LCD 检测框、数字和置信度叠加，详见[完整实现路径](手写数字识别系统_完整实现路径.md)。
+Zynq-7020 双 OV5640 硬件工程的手写数字识别改造项目。目前保留 **CAM0 → VDMA → RGB LCD** 的单摄像头直通基线；已完成 PL 灰度采集与均值滤波、PS 图像预处理与裸机 CNN 推理，LCD 检测框、数字和置信度叠加，以及联合调试统计与验收工具，详见[完整实现路径](手写数字识别系统_完整实现路径.md)。
 
 ## 工程内容
 
@@ -36,4 +36,4 @@ tests/.venv/Scripts/python.exe tests/golden_inference.py --model tests/upstream_
 2. Validate Design，生成 IP Output Products、综合、实现和 bitstream；重新导出 XSA。
 3. 在 Vitis 2020.2 由 XSA 建立/更新 platform，导入 `vitis/dual_ov5640_lcd/src/` 应用源码，并选择 `ps7_cortexa9_0` standalone BSP。当前 `main.c` 包含灰度 ROI、预处理、CNN 推理与 OSD 寄存器控制。
 
-仓库排除了 Vivado 缓存、临时构建目录、PC 虚拟环境和 MNIST 数据集；各阶段可烧录镜像保存在 `artifacts/`。阶段 6 详情见 [LCD 识别结果叠加报告](docs/阶段6_LCD识别结果叠加.md)。
+仓库排除了 Vivado 缓存、临时构建目录、PC 虚拟环境和 MNIST 数据集；各阶段可烧录镜像保存在 `artifacts/`。阶段 6 详情见 [LCD 识别结果叠加报告](docs/阶段6_LCD识别结果叠加.md)，阶段 7 详情见 [联合调试与验收报告](docs/阶段7_联合调试与验收.md)。
