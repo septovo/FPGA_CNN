@@ -1,13 +1,13 @@
 # FPGA_CNN
 
-Zynq-7020 双 OV5640 硬件工程的手写数字识别改造项目。目前保留 **CAM0 → VDMA → RGB LCD** 的单摄像头直通基线；已完成所选数字识别模型的 PC 侧基准测试。PL 图像预处理、PS 裸机推理和 LCD 结果叠加仍按实施路径开发，详见[完整实现路径](手写数字识别系统_完整实现路径.md)。
+Zynq-7020 双 OV5640 硬件工程的手写数字识别改造项目。目前保留 **CAM0 → VDMA → RGB LCD** 的单摄像头直通基线；已完成 PL 灰度采集与均值滤波、PS 图像预处理与裸机 CNN 推理，以及 LCD 检测框、数字和置信度叠加，详见[完整实现路径](手写数字识别系统_完整实现路径.md)。
 
 ## 工程内容
 
 | 路径 | 内容 |
 |---|---|
 | `dual_ov5640_lcd.xpr`、`dual_ov5640_lcd.srcs/` | Vivado 2020.2 工程入口、Block Design、约束和 IP 配置。 |
-| `ip_repo/` | OV5640 采集、RGB LCD 自定义 IP 源码。 |
+| `ip_repo/` | OV5640 采集、灰度均值滤波、AXI4-Stream OSD、RGB LCD 自定义 IP 源码。 |
 | `vitis/dual_ov5640_lcd/src/` | Vitis 2020.2 裸机 C 应用源码。 |
 | `vitis/system_wrapper.xsa` | 当前硬件导出，用于 Vitis platform；后续 PL 改动后需重新导出。 |
 | `tests/upstream_mnist/` | 固定版本的第三方模型、原始测试图片、参考脚本与 MIT 许可证。 |
@@ -34,6 +34,6 @@ tests/.venv/Scripts/python.exe tests/golden_inference.py --model tests/upstream_
 
 1. 用 Vivado 2020.2 打开 `dual_ov5640_lcd.xpr`。工程文件保留了原机器的历史导入路径；若 Vivado 报找不到文件，重新指定本仓库 `dual_ov5640_lcd.srcs/` 的 BD/约束及 `ip_repo/` 的 Repository 路径。
 2. Validate Design，生成 IP Output Products、综合、实现和 bitstream；重新导出 XSA。
-3. 在 Vitis 2020.2 由 XSA 建立/更新 platform，导入 `vitis/dual_ov5640_lcd/src/` 应用源码，并选择 `ps7_cortexa9_0` standalone BSP。当前 `main.c` 是单摄像头直通显示版本。
+3. 在 Vitis 2020.2 由 XSA 建立/更新 platform，导入 `vitis/dual_ov5640_lcd/src/` 应用源码，并选择 `ps7_cortexa9_0` standalone BSP。当前 `main.c` 包含灰度 ROI、预处理、CNN 推理与 OSD 寄存器控制。
 
-仓库排除了 Vivado 缓存、实现结果、Vitis 临时平台、ELF、PC 虚拟环境和 MNIST 数据集。要完全复现本地工作状态，应按上面步骤重新生成这些文件。
+仓库排除了 Vivado 缓存、临时构建目录、PC 虚拟环境和 MNIST 数据集；各阶段可烧录镜像保存在 `artifacts/`。阶段 6 详情见 [LCD 识别结果叠加报告](docs/阶段6_LCD识别结果叠加.md)。

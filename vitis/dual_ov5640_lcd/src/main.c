@@ -48,6 +48,7 @@
 #include "frame_pipeline.h"
 #include "digit_preprocess.h"
 #include "digit_model.h"
+#include "digit_osd.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -247,6 +248,7 @@ int main(void)
     u32 quiet_loops = 0U;
     u32 last_reported_copies = 0U;
     u32 mean_enabled = GRAY_MEAN_ENABLE;
+    u32 osd_enabled = 1U;
     FrameRoiInfo roi_info;
     DigitPreprocessStatus digit_status = DIGIT_NONE;
     u32 preprocess_count = 0U;
@@ -289,6 +291,9 @@ int main(void)
     xil_printf(" CAM0 only - NO image fusion\r\n");
     xil_printf("========================================\r\n");
     xil_printf("LCD ID: 0x%x\r\n", lcd_id);
+    digit_osd_init();
+    xil_printf("OSD AXI-Lite base=0x%08x timeout=%u display frames\r\n",
+               DIGIT_OSD_BASE, DIGIT_OSD_TIMEOUT_FRAMES);
 
 
     /*
@@ -507,6 +512,10 @@ int main(void)
                                     mean_enabled);
                 xil_printf("Gray mean filter=%u (effective next VSYNC)\r\n",
                            mean_enabled);
+            } else if (key == (u32)'o') {
+                osd_enabled ^= 1U;
+                digit_osd_set_enabled(osd_enabled);
+                xil_printf("OSD enabled=%u\r\n", osd_enabled);
             } else if (key == (u32)'p' || key == (u32)'g') {
                 u32 i;
                 if (digit_status != DIGIT_FOUND) {
@@ -554,6 +563,7 @@ int main(void)
                            inference_count, inference_errors, last_digit,
                            last_confidence_permille, last_inference_us,
                            max_inference_us);
+                xil_printf("OSD status=0x%08x\r\n", digit_osd_status());
             }
         }
         if (gray_pipeline.irq_errors != seen_gray_errors) {
@@ -595,6 +605,7 @@ int main(void)
                         max_inference_us = last_inference_us;
                     if (inference_status != 0) {
                         ++inference_errors;
+                        digit_osd_no_digit(roi_info.sequence);
                         xil_printf("CNN inference failed: %d\r\n",
                                    inference_status);
                     } else {
@@ -605,6 +616,10 @@ int main(void)
                         last_confidence_permille =
                             (u32)(digit_scores[best] * 1000.0f + 0.5f);
                         ++inference_count;
+                        digit_osd_show(digit_result.x, digit_result.y,
+                                       digit_result.width, digit_result.height,
+                                       last_digit, last_confidence_permille,
+                                       roi_info.sequence);
                         if (inference_count <= 3U ||
                             inference_count % 12U == 0U)
                             xil_printf("CNN digit=%u confidence=%u/1000 "
@@ -613,6 +628,8 @@ int main(void)
                                        last_inference_us, inference_count);
                     }
                 }
+                if (digit_status != DIGIT_FOUND)
+                    digit_osd_no_digit(roi_info.sequence);
                 if (preprocess_count <= 3U || preprocess_count % 60U == 0U) {
                     xil_printf("Preprocess status=%d box=(%u,%u %ux%u) "
                                "area=%u otsu=%u count=%u times_us=%u/%u/%u/%u\r\n",
